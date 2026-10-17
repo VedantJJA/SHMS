@@ -29,7 +29,7 @@ async function verifyConnection() {
     return true;
   } catch (err) {
     isConnected = false;
-    console.log('[WARN] Neo4j not reachable on ' + (process.env.NEO4J_URI || 'bolt://localhost:7687') + '. In-memory fallback active.');
+    console.log('[WARN] Neo4j not reachable on ' + (process.env.NEO4J_URI || 'bolt://localhost:7687') + '. Database unavailable; preview requires ALLOW_IN_MEMORY_FALLBACK=true.');
     return false;
   }
 }
@@ -60,17 +60,24 @@ async function initConstraints() {
   ];
 
   for (const c of constraints) {
-    try {
-      await runQuery(c);
-    } catch (err) {
-      // Constraint already exists
-    }
+    await runQuery(c);
   }
   console.log('[INFO] Neo4j constraints verified');
 }
 
 function getDriver() {
   return driver;
+}
+
+async function checkConnection() {
+  try {
+    if (!driver) return false;
+    await driver.verifyConnectivity();
+    isConnected = true;
+  } catch {
+    isConnected = false;
+  }
+  return isConnected;
 }
 
 function isNeo4jAvailable() {
@@ -85,6 +92,7 @@ async function closeDriver() {
 
 module.exports = {
   runQuery,
+  checkConnection,
   verifyConnection,
   initConstraints,
   getDriver,

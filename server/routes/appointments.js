@@ -4,6 +4,8 @@ const { v4: uuidv4 } = require('uuid');
 const { getClient, isCassandraAvailable } = require('../config/cassandra');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
+const { requireDatabases } = require('../middleware/databases');
 
 // GET all appointments (by date - defaults to today)
 router.get('/', async (req, res) => {
@@ -29,6 +31,7 @@ router.get('/', async (req, res) => {
         const result = await client.execute(query, params, { prepare: true });
         return res.json(result.rows);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra query failed, serving from store');
       }
     }
@@ -51,6 +54,7 @@ router.get('/all', async (req, res) => {
         const result = await client.execute('SELECT * FROM appointments_by_id');
         return res.json(result.rows);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra query failed, serving from store');
       }
     }
@@ -73,10 +77,12 @@ router.get('/:id', async (req, res) => {
         );
         if (result.rows.length > 0) return res.json(result.rows[0]);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const apt = store.appointments.find(a => a.appointment_id === req.params.id);
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
     res.json(apt);
@@ -86,9 +92,15 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create appointment
-router.post('/', async (req, res) => {
+router.post('/', requireDatabases('neo4j'), async (req, res) => {
   try {
     const { date, time, doctor_id, patient_id, status } = req.body;
+    if (!doctor_id || !patient_id || !/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || '')) {
+      return res.status(400).json({ error: 'Patient, doctor, date (YYYY-MM-DD) and time (HH:mm) are required' });
+    }
+    if (status && !['Scheduled', 'In-Progress', 'Completed', 'Cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid appointment status' });
+    }
     const appointment_id = 'APT-' + uuidv4().slice(0, 8).toUpperCase();
 
     let doctor_name = 'Doctor';
@@ -98,17 +110,19 @@ router.post('/', async (req, res) => {
       try {
         const doctorRecords = await runQuery('MATCH (d:Doctor {staff_id: $id}) RETURN d.name as name', { id: doctor_id });
         const patientRecords = await runQuery('MATCH (p:Patient {patient_id: $id}) RETURN p.name as name', { id: patient_id });
+        if (!doctorRecords.length || !patientRecords.length) return res.status(400).json({ error: 'Patient or doctor does not exist' });
         if (doctorRecords.length > 0) doctor_name = doctorRecords[0].get('name');
         if (patientRecords.length > 0) patient_name = patientRecords[0].get('name');
       } catch (err) {
+        if (!allowFallback) throw err;
         // Fallback names from store
       }
     }
 
     const doc = store.doctors.find(d => d.staff_id === doctor_id);
     const pat = store.patients.find(p => p.patient_id === patient_id);
-    if (doc) doctor_name = doc.name;
-    if (pat) patient_name = pat.name;
+    if (!isNeo4jAvailable() && doc) doctor_name = doc.name;
+    if (!isNeo4jAvailable() && pat) patient_name = pat.name;
 
     const newApt = {
       appointment_id,
@@ -144,6 +158,7 @@ router.post('/', async (req, res) => {
         ];
         await client.batch(queries, { prepare: true });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra write failed, updating store');
       }
     }
@@ -159,6 +174,7 @@ router.post('/', async (req, res) => {
 router.put('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
+    if (!['Scheduled', 'In-Progress', 'Completed', 'Cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid appointment status' });
 
     if (isCassandraAvailable()) {
       try {
@@ -190,12 +206,15 @@ router.put('/:id/status', async (req, res) => {
             },
           ];
           await client.batch(queries, { prepare: true });
+          return res.json({ ...apt, status });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra status update failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.appointments.findIndex(a => a.appointment_id === req.params.id);
     if (idx !== -1) {
       store.appointments[idx].status = status;
@@ -243,6 +262,7 @@ router.delete('/:id', async (req, res) => {
           await client.batch(queries, { prepare: true });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra delete failed, updating store');
       }
     }

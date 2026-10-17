@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET all medical records
 router.get('/', async (req, res) => {
@@ -34,6 +35,7 @@ router.get('/', async (req, res) => {
 
         return res.json(medRecords);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j medical records query failed, serving from store');
       }
     }
@@ -69,10 +71,12 @@ router.get('/:id', async (req, res) => {
           });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j record lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const rec = store.medicalRecords.find(r => r.record_id === req.params.id);
     if (!rec) return res.status(404).json({ error: 'Medical record not found' });
     res.json(rec);
@@ -115,10 +119,12 @@ router.post('/', async (req, res) => {
           return res.status(201).json(created);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j create record failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(400).json({ error: 'Patient or doctor does not exist' });
     const pat = store.patients.find(p => p.patient_id === patient_id);
     const doc = store.doctors.find(d => d.staff_id === doctor_id);
     const newRecord = {
@@ -158,10 +164,12 @@ router.put('/:id', async (req, res) => {
           return res.json(updated);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j update record failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.medicalRecords.findIndex(r => r.record_id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Medical record not found' });
     store.medicalRecords[idx] = { ...store.medicalRecords[idx], diagnosis, date };
@@ -181,6 +189,7 @@ router.delete('/:id', async (req, res) => {
           DETACH DELETE mr
         `, { id: req.params.id });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j delete record failed, updating store');
       }
     }

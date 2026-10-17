@@ -9,3 +9,5 @@ server/.env
 
 .DS_Store
 Thumbs.db
+# Local runtime logs and process identifiers
+.runtime/

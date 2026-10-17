@@ -3,6 +3,7 @@ const router = express.Router();
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const { getClient, isCassandraAvailable } = require('../config/cassandra');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET dashboard statistics
 router.get('/stats', async (req, res) => {
@@ -40,6 +41,7 @@ router.get('/stats', async (req, res) => {
         medicineCount = toNum(mC);
         occupiedRooms = toNum(occC);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j stats query failed, serving from store');
       }
     }
@@ -63,6 +65,7 @@ router.get('/stats', async (req, res) => {
         totalBills = billResult.rows.length;
         pendingBills = billResult.rows.filter(r => r.payment_status === 'Pending').length;
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra stats query failed, serving from store');
       }
     }
@@ -93,6 +96,7 @@ router.get('/recent-appointments', async (req, res) => {
         const result = await cassClient.execute('SELECT * FROM appointments_by_id LIMIT 10');
         return res.json(result.rows);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra query failed, serving from store');
       }
     }
@@ -120,6 +124,7 @@ router.get('/dept-doctors', async (req, res) => {
         }));
         return res.json(data);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j query failed, serving from store');
       }
     }

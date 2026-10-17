@@ -13,6 +13,7 @@ import MedicalRecords from './pages/MedicalRecords';
 import Prescriptions from './pages/Prescriptions';
 import Medicines from './pages/Medicines';
 import Bills from './pages/Bills';
+import DatabaseLab from './pages/DatabaseLab';
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
               <Route path="/prescriptions" element={<Prescriptions />} />
               <Route path="/medicines" element={<Medicines />} />
               <Route path="/bills" element={<Bills />} />
+              <Route path="/database-lab" element={<DatabaseLab />} />
             </Routes>
           </div>
         </main>

@@ -86,12 +86,12 @@ const store = {
   ],
 
   medicines: [
-    { medicine_id: 'MED-001', medicine_name: 'Amoxicillin 500mg', unit_price: 12.50 },
-    { medicine_id: 'MED-002', medicine_name: 'Metformin 850mg', unit_price: 8.00 },
-    { medicine_id: 'MED-003', medicine_name: 'Atorvastatin 20mg', unit_price: 18.25 },
-    { medicine_id: 'MED-004', medicine_name: 'Paracetamol 650mg', unit_price: 4.50 },
-    { medicine_id: 'MED-005', medicine_name: 'Ceftriaxone 1g IV', unit_price: 35.00 },
-    { medicine_id: 'MED-006', medicine_name: 'Ibuprofen 400mg', unit_price: 6.75 },
+    { medicine_id: 'MED-001', medicine_name: 'Amoxicillin 500mg', unit_price: 12.50, stock_quantity: 120 },
+    { medicine_id: 'MED-002', medicine_name: 'Metformin 850mg', unit_price: 8.00, stock_quantity: 200 },
+    { medicine_id: 'MED-003', medicine_name: 'Atorvastatin 20mg', unit_price: 18.25, stock_quantity: 90 },
+    { medicine_id: 'MED-004', medicine_name: 'Paracetamol 650mg', unit_price: 4.50, stock_quantity: 300 },
+    { medicine_id: 'MED-005', medicine_name: 'Ceftriaxone 1g IV', unit_price: 35.00, stock_quantity: 40 },
+    { medicine_id: 'MED-006', medicine_name: 'Ibuprofen 400mg', unit_price: 6.75, stock_quantity: 150 },
   ],
 
   medicalRecords: [

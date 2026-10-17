@@ -4,6 +4,8 @@ const { v4: uuidv4 } = require('uuid');
 const { getClient, isCassandraAvailable } = require('../config/cassandra');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
+const { requireDatabases } = require('../middleware/databases');
 
 // GET all bills
 router.get('/', async (req, res) => {
@@ -23,6 +25,7 @@ router.get('/', async (req, res) => {
         }
         return res.json(result.rows);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra bills query failed, serving from store');
       }
     }
@@ -49,10 +52,12 @@ router.get('/:id', async (req, res) => {
         );
         if (result.rows.length > 0) return res.json(result.rows[0]);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra bill lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const bill = store.bills.find(b => b.bill_id === req.params.id);
     if (!bill) return res.status(404).json({ error: 'Bill not found' });
     res.json(bill);
@@ -62,9 +67,11 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create bill
-router.post('/', async (req, res) => {
+router.post('/', requireDatabases('neo4j'), async (req, res) => {
   try {
     const { patient_id, appointment_id, amount, payment_status } = req.body;
+    if (!patient_id || amount === '' || amount == null || !Number.isFinite(Number(amount)) || Number(amount) <= 0) return res.status(400).json({ error: 'A patient and a positive bill amount are required' });
+    if (payment_status && !['Pending', 'Paid'].includes(payment_status)) return res.status(400).json({ error: 'Invalid payment status' });
     const bill_id = 'BILL-' + uuidv4().slice(0, 8).toUpperCase();
     const created_at = new Date().toISOString();
 
@@ -75,14 +82,20 @@ router.post('/', async (req, res) => {
           'MATCH (p:Patient {patient_id: $id}) RETURN p.name as name',
           { id: patient_id }
         );
+        if (!patientRecords.length) return res.status(400).json({ error: 'Patient does not exist' });
         if (patientRecords.length > 0) patient_name = patientRecords[0].get('name');
       } catch (err) {
+        if (!allowFallback) throw err;
         // Fallback to store
       }
     }
 
     const pat = store.patients.find(p => p.patient_id === patient_id);
-    if (pat) patient_name = pat.name;
+    if (!isNeo4jAvailable() && pat) patient_name = pat.name;
+    if (appointment_id && isCassandraAvailable()) {
+      const result = await getClient().execute('SELECT patient_id FROM appointments_by_id WHERE appointment_id = ?', [appointment_id], { prepare: true });
+      if (!result.rows.length || result.rows[0].patient_id !== patient_id) return res.status(400).json({ error: 'Appointment does not belong to this patient' });
+    }
 
     const newBill = {
       bill_id,
@@ -109,6 +122,7 @@ router.post('/', async (req, res) => {
         ];
         await client.batch(queries, { prepare: true });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra create bill failed, updating store');
       }
     }
@@ -124,6 +138,7 @@ router.post('/', async (req, res) => {
 router.put('/:id/status', async (req, res) => {
   try {
     const { payment_status } = req.body;
+    if (!['Pending', 'Paid'].includes(payment_status)) return res.status(400).json({ error: 'Invalid payment status' });
 
     if (isCassandraAvailable()) {
       try {
@@ -147,12 +162,15 @@ router.put('/:id/status', async (req, res) => {
             },
           ];
           await client.batch(queries, { prepare: true });
+          return res.json({ ...bill, payment_status });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra update bill failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.bills.findIndex(b => b.bill_id === req.params.id);
     if (idx !== -1) {
       store.bills[idx].payment_status = payment_status;
@@ -192,6 +210,7 @@ router.delete('/:id', async (req, res) => {
           await client.batch(queries, { prepare: true });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Cassandra delete bill failed, updating store');
       }
     }

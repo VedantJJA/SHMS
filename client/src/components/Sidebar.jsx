@@ -9,6 +9,8 @@ const navItems = [
   { section: 'Overview' },
   { path: '/', label: 'Dashboard', icon: <FiGrid /> },
 
+  { path: '/database-lab', label: 'Database Lab', icon: <FiActivity /> },
+
   { section: 'People' },
   { path: '/patients', label: 'Patients', icon: <FiUsers /> },
   { path: '/doctors', label: 'Doctors', icon: <FiUserCheck /> },

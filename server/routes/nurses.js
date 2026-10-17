@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET all nurses
 router.get('/', async (req, res) => {
@@ -27,6 +28,7 @@ router.get('/', async (req, res) => {
 
         return res.json(nurses);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j nurses query failed, serving from store');
       }
     }
@@ -55,10 +57,12 @@ router.get('/:id', async (req, res) => {
           return res.json({ ...nurse, department: dept ? dept.properties : null, medical_records: medRecords });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j nurse lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const nurse = store.nurses.find(n => n.staff_id === req.params.id);
     if (!nurse) return res.status(404).json({ error: 'Nurse not found' });
     res.json(nurse);
@@ -97,6 +101,7 @@ router.post('/', async (req, res) => {
         store.nurses.push(created);
         return res.status(201).json(created);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j create nurse failed, updating store');
       }
     }
@@ -147,10 +152,12 @@ router.put('/:id', async (req, res) => {
           return res.json(updated);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j update nurse failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.nurses.findIndex(n => n.staff_id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Nurse not found' });
     const dept = store.departments.find(d => d.dept_id === dept_id);
@@ -178,6 +185,7 @@ router.delete('/:id', async (req, res) => {
           DETACH DELETE n
         `, { id: req.params.id });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j delete nurse failed, updating store');
       }
     }

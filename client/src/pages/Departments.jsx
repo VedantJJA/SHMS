@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FiPlus, FiEdit2, FiTrash2, FiActivity, FiUserCheck, FiMapPin, FiUsers } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
-import { getDepartments, createDepartment, updateDepartment, deleteDepartment, setDeptHead, getDoctors } from '../services/api';
+import { getDepartments, getDepartment, createDepartment, updateDepartment, deleteDepartment, setDeptHead, getDoctors } from '../services/api';
 
 export default function Departments() {
   const [departments, setDepartments] = useState([]);
@@ -18,6 +18,30 @@ export default function Departments() {
   const [showHeadModal, setShowHeadModal] = useState(false);
   const [selectedDept, setSelectedDept] = useState(null);
   const [headDoctorId, setHeadDoctorId] = useState('');
+  const [staffDepartment, setStaffDepartment] = useState(null);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState('');
+
+  useEffect(() => {
+    if (!staffDepartment) return;
+    let active = true;
+    getDepartment(staffDepartment.dept_id).then(response => {
+      if (active) setStaffMembers(response.data.staff_members || []);
+    }).catch(error => {
+      if (active) setStaffError(error.response?.data?.error || 'Failed to load department staff');
+    }).finally(() => {
+      if (active) setStaffLoading(false);
+    });
+    return () => { active = false; };
+  }, [staffDepartment]);
+
+  function openStaff(department) {
+    setStaffMembers([]);
+    setStaffError('');
+    setStaffLoading(true);
+    setStaffDepartment(department);
+  }
 
   useEffect(() => {
     load();
@@ -180,10 +204,15 @@ export default function Departments() {
                     )}
                   </td>
                   <td>
-                    <span className="badge badge-info">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => openStaff(d)}
+                      aria-label={'View staff in ' + d.dept_name}
+                    >
                       <FiUsers style={{ marginRight: 4 }} />
-                      {d.staff_count ?? 0} Staff
-                    </span>
+                      {d.staff_count ?? 0} Staff · View
+                    </button>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -201,6 +230,32 @@ export default function Departments() {
           </tbody>
         </table>
       </div>
+
+      {staffDepartment && (
+        <Modal
+          title={'Staff in ' + staffDepartment.dept_name}
+          onClose={() => setStaffDepartment(null)}
+          footer={<button className="btn btn-secondary" onClick={() => setStaffDepartment(null)}>Close</button>}
+        >
+          {staffLoading ? <p role="status">Loading department staff...</p> : staffError ? (
+            <p role="alert">{staffError}</p>
+          ) : staffMembers.length === 0 ? <p>No staff assigned to this department.</p> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" aria-label={'Staff in ' + staffDepartment.dept_name}>
+                <thead><tr><th>Staff ID</th><th>Name</th><th>Role</th><th>Specialization / Shift</th></tr></thead>
+                <tbody>{staffMembers.map(member => (
+                  <tr key={member.staff_id}>
+                    <td>{member.staff_id}</td>
+                    <td>{member.name}</td>
+                    <td>{member.role}</td>
+                    <td>{member.specialization || (member.shift ? member.shift + ' shift' : '—')}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {/* Create / Edit Department Modal */}
       {showModal && (

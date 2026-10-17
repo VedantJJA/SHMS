@@ -12,7 +12,7 @@ export default function Medicines() {
   // Modal
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ medicine_name: '', unit_price: '' });
+  const [form, setForm] = useState({ medicine_name: '', unit_price: '', stock_quantity: '' });
 
   useEffect(() => {
     load();
@@ -31,13 +31,13 @@ export default function Medicines() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ medicine_name: '', unit_price: '' });
+    setForm({ medicine_name: '', unit_price: '', stock_quantity: '' });
     setShowModal(true);
   }
 
   function openEdit(med) {
     setEditing(med);
-    setForm({ medicine_name: med.medicine_name, unit_price: med.unit_price });
+    setForm({ medicine_name: med.medicine_name, unit_price: med.unit_price, stock_quantity: med.stock_quantity ?? '' });
     setShowModal(true);
   }
 
@@ -84,7 +84,7 @@ export default function Medicines() {
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="db-badge neo4j">[Neo4j] Graph DB</span>
           <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Entity (:Medicine {`{medicine_id, medicine_name, unit_price}`})
+            Entity (:Medicine {`{medicine_id, medicine_name, unit_price, stock_quantity}`})
           </span>
         </div>
         <div className="search-bar" style={{ width: '280px' }}>
@@ -113,6 +113,7 @@ export default function Medicines() {
               <th>Medicine ID</th>
               <th>Medicine Name</th>
               <th>Unit Price</th>
+              <th>Stock Quantity</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -120,7 +121,7 @@ export default function Medicines() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="5" className="empty-state">
+                <td colSpan="6" className="empty-state">
                   <FiPackage style={{ fontSize: 32 }} />
                   <p>No medicines found</p>
                 </td>
@@ -139,8 +140,11 @@ export default function Medicines() {
                       <FiDollarSign style={{ fontSize: 13 }} /> {parseFloat(m.unit_price).toFixed(2)}
                     </span>
                   </td>
+                  <td>{m.stock_quantity == null ? 'Not recorded' : m.stock_quantity + ' units'}</td>
                   <td>
-                    <span className="badge badge-success">In Stock</span>
+                    <span className={'badge ' + (m.stock_quantity == null ? 'badge-info' : m.stock_quantity > 0 ? 'badge-success' : 'badge-danger')}>
+                      {m.stock_quantity == null ? 'Unknown' : m.stock_quantity > 0 ? 'In Stock' : 'Out of Stock'}
+                    </span>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -167,11 +171,11 @@ export default function Medicines() {
           footer={
             <>
               <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSubmit}>{editing ? 'Update' : 'Create'}</button>
+              <button className="btn btn-primary" type="submit" form="medicine-form">{editing ? 'Update' : 'Create'}</button>
             </>
           }
         >
-          <form onSubmit={handleSubmit}>
+          <form id="medicine-form" onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">Medicine Name</label>
               <input
@@ -193,6 +197,20 @@ export default function Medicines() {
                 onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
                 required
                 placeholder="e.g. 15.50"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="medicine-stock">Stock Quantity (units)</label>
+              <input
+                id="medicine-stock"
+                type="number"
+                min="0"
+                step="1"
+                className="form-input"
+                value={form.stock_quantity}
+                onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
+                required
+                placeholder="e.g. 120"
               />
             </div>
           </form>

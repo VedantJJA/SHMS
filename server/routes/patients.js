@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET all patients
 router.get('/', async (req, res) => {
@@ -24,6 +25,7 @@ router.get('/', async (req, res) => {
 
         return res.json(patients);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j patients query failed, serving from store');
       }
     }
@@ -57,10 +59,12 @@ router.get('/:id', async (req, res) => {
           return res.json({ ...p, admissions, medical_records: medRecords, prescriptions });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j patient lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const patient = store.patients.find(p => p.patient_id === req.params.id);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
     res.json(patient);
@@ -73,6 +77,9 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { name, dob, phone, blood_group } = req.body;
+    if (typeof name !== 'string' || !name.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(dob || '') || typeof phone !== 'string' || !phone.trim() || !['A+','A-','B+','B-','AB+','AB-','O+','O-'].includes(blood_group)) {
+      return res.status(400).json({ error: 'Name, date of birth, phone and a valid blood group are required' });
+    }
     const patient_id = 'PAT-' + uuidv4().slice(0, 8).toUpperCase();
 
     if (isNeo4jAvailable()) {
@@ -92,6 +99,7 @@ router.post('/', async (req, res) => {
         store.patients.push({ ...created, admissions: [] });
         return res.status(201).json(created);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j create patient failed, updating store');
       }
     }
@@ -126,10 +134,12 @@ router.put('/:id', async (req, res) => {
           return res.json(updated);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j update patient failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.patients.findIndex(p => p.patient_id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Patient not found' });
     store.patients[idx] = { ...store.patients[idx], name, dob, phone, blood_group };
@@ -149,6 +159,7 @@ router.delete('/:id', async (req, res) => {
           DETACH DELETE p
         `, { id: req.params.id });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j delete patient failed, updating store');
       }
     }
@@ -187,10 +198,12 @@ router.post('/:id/admit', async (req, res) => {
           return res.json({ message: 'Patient admitted successfully' });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j admit failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Patient or room not found' });
     const p = store.patients.find(pt => pt.patient_id === req.params.id);
     if (!p) return res.status(404).json({ error: 'Patient not found' });
     p.admissions.push({ room_no, admit_date, discharge_date: null });
@@ -215,17 +228,20 @@ router.put('/:id/discharge', async (req, res) => {
 
     if (isNeo4jAvailable()) {
       try {
-        await runQuery(`
+        const records = await runQuery(`
           MATCH (p:Patient {patient_id: $id})-[a:ADMITTED_TO]->(r:Room {room_no: $room_no})
           WHERE a.discharge_date IS NULL
           SET a.discharge_date = $discharge_date
           RETURN p, r
         `, { id: req.params.id, room_no, discharge_date });
+        if (records.length) return res.json({ message: 'Patient discharged successfully' });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j discharge failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const p = store.patients.find(pt => pt.patient_id === req.params.id);
     if (p) {
       const adm = p.admissions.find(a => a.room_no === room_no && !a.discharge_date);

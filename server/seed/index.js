@@ -154,16 +154,16 @@ async function seedNeo4j() {
 
   // Medicines
   const medicines = [
-    { medicine_id: 'MED-001', medicine_name: 'Amoxicillin 500mg', unit_price: 12.50 },
-    { medicine_id: 'MED-002', medicine_name: 'Metformin 850mg', unit_price: 8.00 },
-    { medicine_id: 'MED-003', medicine_name: 'Atorvastatin 20mg', unit_price: 18.25 },
-    { medicine_id: 'MED-004', medicine_name: 'Paracetamol 650mg', unit_price: 4.50 },
-    { medicine_id: 'MED-005', medicine_name: 'Ceftriaxone 1g IV', unit_price: 35.00 },
-    { medicine_id: 'MED-006', medicine_name: 'Ibuprofen 400mg', unit_price: 6.75 },
+    { medicine_id: 'MED-001', medicine_name: 'Amoxicillin 500mg', unit_price: 12.50, stock_quantity: 120 },
+    { medicine_id: 'MED-002', medicine_name: 'Metformin 850mg', unit_price: 8.00, stock_quantity: 200 },
+    { medicine_id: 'MED-003', medicine_name: 'Atorvastatin 20mg', unit_price: 18.25, stock_quantity: 90 },
+    { medicine_id: 'MED-004', medicine_name: 'Paracetamol 650mg', unit_price: 4.50, stock_quantity: 300 },
+    { medicine_id: 'MED-005', medicine_name: 'Ceftriaxone 1g IV', unit_price: 35.00, stock_quantity: 40 },
+    { medicine_id: 'MED-006', medicine_name: 'Ibuprofen 400mg', unit_price: 6.75, stock_quantity: 150 },
   ];
 
   for (const m of medicines) {
-    await runQuery('CREATE (med:Medicine {medicine_id: $medicine_id, medicine_name: $medicine_name, unit_price: $unit_price})', m);
+    await runQuery('CREATE (med:Medicine {medicine_id: $medicine_id, medicine_name: $medicine_name, unit_price: $unit_price, stock_quantity: toInteger($stock_quantity)})', m);
   }
   console.log('  [+] Medicines created');
 
@@ -236,6 +236,12 @@ async function seedCassandra() {
     { appointment_id: 'APT-006', date: '2026-10-17', time: '15:00', doctor_id: 'DOC-005', doctor_name: 'Dr. Meera Joshi', patient_id: 'PAT-006', patient_name: 'Meenakshi Iyer', status: 'Scheduled' },
   ];
 
+  appointments.push(
+    { appointment_id: 'APT-007', date: '2026-10-20', time: '09:00', doctor_id: 'DOC-001', doctor_name: 'Dr. Anika Sharma', patient_id: 'PAT-001', patient_name: 'Rahul Deshmukh', status: 'Scheduled' },
+    { appointment_id: 'APT-008', date: '2026-10-20', time: '10:00', doctor_id: 'DOC-002', doctor_name: 'Dr. Rajesh Patel', patient_id: 'PAT-002', patient_name: 'Sunita Verma', status: 'Scheduled' },
+    { appointment_id: 'APT-009', date: '2026-10-20', time: '11:00', doctor_id: 'DOC-001', doctor_name: 'Dr. Anika Sharma', patient_id: 'PAT-003', patient_name: 'Amitabh Sen', status: 'Scheduled' }
+  );
+
   for (const a of appointments) {
     const queries = [
       {
@@ -293,8 +299,9 @@ async function main() {
     if (!neoOk && !cassOk) {
       console.log('[WARN] Both Neo4j and Cassandra are currently unreachable.');
       console.log('[INFO] Start Docker or local databases with "docker compose up -d" to seed.');
-      return;
+      throw new Error('Both database services must be running before importing the dataset');
     }
+    if (!neoOk || !cassOk) throw new Error('Both database services must be running before importing the dataset');
 
     if (neoOk) {
       await initConstraints();
@@ -309,10 +316,10 @@ async function main() {
     console.log('\n[SUCCESS] Seed process completed successfully.\n');
   } catch (err) {
     console.error('\n[ERROR] Seeding failed:', err.message);
+    process.exitCode = 1;
   } finally {
     await closeDriver();
     await closeClient();
-    process.exit(0);
   }
 }
 

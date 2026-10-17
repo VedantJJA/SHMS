@@ -44,13 +44,13 @@ async function initCassandra() {
     return true;
   } catch (err) {
     isConnected = false;
-    console.log('[WARN] Cassandra not reachable on ' + contactPoints.join(',') + '. In-memory fallback active.');
+    console.log('[WARN] Cassandra not reachable on ' + contactPoints.join(',') + '. Database unavailable; preview requires ALLOW_IN_MEMORY_FALLBACK=true.');
     return false;
   }
 }
 
 async function createTables() {
-  if (!client || !isConnected) return;
+  if (!client) throw new Error('Cassandra client is not initialized');
   const tables = [
     `CREATE TABLE IF NOT EXISTS appointments_by_doctor (
       doctor_id TEXT,
@@ -124,12 +124,20 @@ async function createTables() {
   ];
 
   for (const t of tables) {
-    try {
-      await client.execute(t);
-    } catch (err) {
-      // Table may exist
-    }
+    await client.execute(t);
   }
+}
+
+async function checkConnection() {
+  try {
+    if (!client) return false;
+    await client.execute('SELECT appointment_id FROM appointments_by_id LIMIT 1');
+    await client.execute('SELECT bill_id FROM bills_by_id LIMIT 1');
+    isConnected = true;
+  } catch {
+    isConnected = false;
+  }
+  return isConnected;
 }
 
 function getClient() {
@@ -148,6 +156,7 @@ async function closeClient() {
 
 module.exports = {
   initCassandra,
+  checkConnection,
   getClient,
   isCassandraAvailable,
   closeClient,

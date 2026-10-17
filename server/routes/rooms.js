@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET all rooms
 router.get('/', async (req, res) => {
@@ -28,6 +29,7 @@ router.get('/', async (req, res) => {
 
         return res.json(rooms);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j rooms query failed, serving from store');
       }
     }
@@ -58,10 +60,12 @@ router.get('/:room_no', async (req, res) => {
           return res.json({ ...r, admissions, doctors });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j room lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const room = store.rooms.find(r => r.room_no === req.params.room_no);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json(room);
@@ -90,6 +94,7 @@ router.post('/', async (req, res) => {
         store.rooms.push({ ...created, is_occupied: false, current_patients: [], attending_doctors: [] });
         return res.status(201).json(created);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j create room failed, updating store');
       }
     }
@@ -131,10 +136,12 @@ router.put('/:room_no', async (req, res) => {
           return res.json(updated);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j update room failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.rooms.findIndex(r => r.room_no === req.params.room_no);
     if (idx === -1) return res.status(404).json({ error: 'Room not found' });
     store.rooms[idx] = { ...store.rooms[idx], floor: parseInt(floor), room_type };
@@ -154,6 +161,7 @@ router.delete('/:room_no', async (req, res) => {
           DETACH DELETE r
         `, { room_no: req.params.room_no });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j delete room failed, updating store');
       }
     }

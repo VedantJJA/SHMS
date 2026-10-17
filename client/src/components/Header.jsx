@@ -5,6 +5,7 @@ import { getDbStatus } from '../services/api';
 
 const pageTitles = {
   '/': 'Dashboard',
+  '/database-lab': 'Database Lab',
   '/patients': 'Patient Management',
   '/doctors': 'Doctor Management',
   '/nurses': 'Nurse Management',
@@ -20,7 +21,7 @@ const pageTitles = {
 export default function Header() {
   const location = useLocation();
   const title = pageTitles[location.pathname] || 'SHMS';
-  const [dbStatus, setDbStatus] = useState({ neo4j: false, cassandra: false, mode: 'fallback' });
+  const [dbStatus, setDbStatus] = useState({ neo4j: false, cassandra: false, mode: 'unavailable' });
 
   useEffect(() => {
     checkStatus();
@@ -33,7 +34,7 @@ export default function Header() {
       const res = await getDbStatus();
       setDbStatus(res.data);
     } catch (err) {
-      setDbStatus({ neo4j: false, cassandra: false, mode: 'fallback' });
+      setDbStatus({ neo4j: false, cassandra: false, mode: 'unavailable' });
     }
   }
 
@@ -51,10 +52,10 @@ export default function Header() {
             color: dbStatus.neo4j ? '#38bdf8' : '#94a3b8',
             background: 'var(--bg-card)',
           }}
-          title={dbStatus.neo4j ? 'Neo4j Graph Database Connected' : 'Neo4j Offline (In-Memory Fallback Active)'}
+          title={dbStatus.neo4j ? 'Neo4j Graph Database Connected' : dbStatus.mode === 'preview' ? 'Sample data preview only' : 'Neo4j database unavailable'}
         >
           {dbStatus.neo4j ? <FiCheckCircle style={{ color: '#10b981', marginRight: 4 }} /> : <FiAlertCircle style={{ color: '#f59e0b', marginRight: 4 }} />}
-          Neo4j: {dbStatus.neo4j ? 'Live' : 'Fallback Store'}
+          Neo4j: {dbStatus.neo4j ? 'Live' : dbStatus.mode === 'preview' ? 'Preview' : 'Offline'}
         </div>
 
         <div
@@ -67,10 +68,10 @@ export default function Header() {
             color: dbStatus.cassandra ? '#34d399' : '#94a3b8',
             background: 'var(--bg-card)',
           }}
-          title={dbStatus.cassandra ? 'Apache Cassandra Connected' : 'Cassandra Offline (In-Memory Fallback Active)'}
+          title={dbStatus.cassandra ? 'Apache Cassandra Connected' : dbStatus.mode === 'preview' ? 'Sample data preview only' : 'Cassandra database unavailable'}
         >
           {dbStatus.cassandra ? <FiCheckCircle style={{ color: '#10b981', marginRight: 4 }} /> : <FiAlertCircle style={{ color: '#f59e0b', marginRight: 4 }} />}
-          Cassandra: {dbStatus.cassandra ? 'Live' : 'Fallback Store'}
+          Cassandra: {dbStatus.cassandra ? 'Live' : dbStatus.mode === 'preview' ? 'Preview' : 'Offline'}
         </div>
       </div>
     </header>

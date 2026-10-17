@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { runQuery, isNeo4jAvailable } = require('../config/neo4j');
 const store = require('../data/store');
+const { allowFallback } = require('../config/runtime');
 
 // GET all departments
 router.get('/', async (req, res) => {
@@ -29,6 +30,7 @@ router.get('/', async (req, res) => {
 
         return res.json(departments);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j departments query failed, serving from store');
       }
     }
@@ -53,17 +55,26 @@ router.get('/:id', async (req, res) => {
         if (records.length > 0) {
           const dept = records[0].get('dept').properties;
           const head = records[0].get('head_doctor');
-          const staff = records[0].get('staff_members').filter(Boolean).map(s => s.properties);
+          const staff = records[0].get('staff_members').filter(Boolean).map(s => ({
+            ...s.properties,
+            role: s.labels.includes('Doctor') ? 'Doctor' : s.labels.includes('Nurse') ? 'Nurse' : 'Staff',
+          }));
           return res.json({ ...dept, head_doctor: head ? head.properties : null, staff_members: staff });
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j department lookup failed, serving from store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const dept = store.departments.find(d => d.dept_id === req.params.id);
     if (!dept) return res.status(404).json({ error: 'Department not found' });
-    res.json(dept);
+    const staff = [
+      ...store.doctors.filter(member => member.department?.dept_id === req.params.id).map(member => ({ ...member, role: 'Doctor' })),
+      ...store.nurses.filter(member => member.department?.dept_id === req.params.id).map(member => ({ ...member, role: 'Nurse' })),
+    ];
+    res.json({ ...dept, staff_members: staff });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -90,6 +101,7 @@ router.post('/', async (req, res) => {
         store.departments.push({ ...created, head_doctor: null, staff_count: 0 });
         return res.status(201).json(created);
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j create department failed, updating store');
       }
     }
@@ -124,10 +136,12 @@ router.put('/:id', async (req, res) => {
           return res.json(updated);
         }
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j update department failed, updating store');
       }
     }
 
+    if (!allowFallback) return res.status(404).json({ error: 'Record not found' });
     const idx = store.departments.findIndex(d => d.dept_id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Department not found' });
     store.departments[idx] = { ...store.departments[idx], dept_name, location };
@@ -147,6 +161,7 @@ router.delete('/:id', async (req, res) => {
           DETACH DELETE dept
         `, { id: req.params.id });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j delete department failed, updating store');
       }
     }
@@ -175,6 +190,7 @@ router.post('/:id/set-head', async (req, res) => {
           CREATE (d)-[:HEADS]->(dept)
         `, { id: req.params.id, doctor_id });
       } catch (err) {
+        if (!allowFallback) throw err;
         console.log('[WARN] Neo4j set head failed, updating store');
       }
     }
